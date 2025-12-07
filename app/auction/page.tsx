@@ -629,7 +629,7 @@ export default function AuctionPage() {
                   <div>
                     <h3 className="text-lg font-semibold text-green-900">All Players Processed</h3>
                     <p className="text-sm text-green-700">
-                      You've gone through all {players.length} players. Click "End Auction" when ready to finish.
+                      You&apos;ve gone through all {players.length} players. Click &quot;End Auction&quot; when ready to finish.
                     </p>
                   </div>
                 </div>
@@ -772,7 +772,7 @@ export default function AuctionPage() {
                       <DialogHeader>
                         <DialogTitle>Change Status for {currentPlayer.name}</DialogTitle>
                         <DialogDescription>
-                          Manually change the player's auction status
+                          Manually change the player&apos;s auction status
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4">
@@ -798,7 +798,7 @@ export default function AuctionPage() {
                             </SelectContent>
                           </Select>
                           <p className="text-xs text-muted-foreground">
-                            Note: Changing from 'sold' will remove player from team
+                            Note: Changing from &apos;sold&apos; will remove player from team
                           </p>
                         </div>
                         <div className="flex gap-3">
@@ -818,7 +818,7 @@ export default function AuctionPage() {
                 {/* Player Introduction */}
                 {currentPlayer.intro && (
                   <p className="text-lg text-muted-foreground italic mb-4 max-w-2xl mx-auto">
-                    "{currentPlayer.intro}"
+                    &quot;{currentPlayer.intro}&quot;
                   </p>
                 )}
 
