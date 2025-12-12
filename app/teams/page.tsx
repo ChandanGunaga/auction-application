@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Team } from '@/types/auction';
-import { storage } from '@/lib/storage';
+import { useTeams } from '@/hooks/use-storage';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Home, Plus, Zap, Pencil, Trash2, Users } from 'lucide-react';
+import { Home, Plus, Zap, Pencil, Trash2, Users, Loader2, Upload, X } from 'lucide-react';
 
 const PRESET_COLORS = [
   { name: 'Red', value: '#EF4444' },
@@ -26,7 +26,7 @@ const PRESET_COLORS = [
 ];
 
 export default function TeamsPage() {
-  const [teams, setTeams] = useState<Team[]>([]);
+  const { teams, loading, saveTeams } = useTeams();
   const [showDialog, setShowDialog] = useState(false);
   const [showQuickSetup, setShowQuickSetup] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
@@ -34,6 +34,8 @@ export default function TeamsPage() {
     name: '',
     budget: '',
     color: PRESET_COLORS[0].value,
+    logoUrl: '',
+    logoFile: '',
   });
   const [quickSetupData, setQuickSetupData] = useState({
     numTeams: '',
@@ -41,11 +43,15 @@ export default function TeamsPage() {
   });
 
   useEffect(() => {
-    const savedTeams = storage.getTeams();
-    setTeams(savedTeams);
-  }, []);
+    if (!editingTeam) {
+      setFormData(prev => ({
+        ...prev,
+        color: PRESET_COLORS[teams.length % PRESET_COLORS.length].value,
+      }));
+    }
+  }, [teams.length, editingTeam]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (editingTeam) {
@@ -57,11 +63,12 @@ export default function TeamsPage() {
               color: formData.color,
               budget: Number(formData.budget),
               remainingBudget: Number(formData.budget) - (t.budget - t.remainingBudget),
+              logoUrl: formData.logoUrl || undefined,
+              logoFile: formData.logoFile || undefined,
             }
           : t
       );
-      setTeams(updated);
-      storage.saveTeams(updated);
+      await saveTeams(updated);
     } else {
       const newTeam: Team = {
         id: Date.now().toString(),
@@ -70,13 +77,29 @@ export default function TeamsPage() {
         remainingBudget: Number(formData.budget),
         color: formData.color,
         players: [],
+        logoUrl: formData.logoUrl || undefined,
+        logoFile: formData.logoFile || undefined,
       };
       const updated = [...teams, newTeam];
-      setTeams(updated);
-      storage.saveTeams(updated);
+      await saveTeams(updated);
     }
 
     resetForm();
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file && (file.type === 'image/png' || file.type === 'image/jpeg' || file.type === 'image/jpg' || file.type === 'image/svg+xml')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, logoFile: reader.result as string, logoUrl: '' });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeLogo = () => {
+    setFormData({ ...formData, logoFile: '', logoUrl: '' });
   };
 
   const handleEdit = (team: Team) => {
@@ -85,15 +108,16 @@ export default function TeamsPage() {
       name: team.name,
       budget: team.budget.toString(),
       color: team.color,
+      logoUrl: team.logoUrl || '',
+      logoFile: team.logoFile || '',
     });
     setShowDialog(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this team?')) {
       const updated = teams.filter(t => t.id !== id);
-      setTeams(updated);
-      storage.saveTeams(updated);
+      await saveTeams(updated);
     }
   };
 
@@ -102,12 +126,14 @@ export default function TeamsPage() {
       name: '',
       budget: '',
       color: PRESET_COLORS[teams.length % PRESET_COLORS.length].value,
+      logoUrl: '',
+      logoFile: '',
     });
     setEditingTeam(null);
     setShowDialog(false);
   };
 
-  const handleQuickSetup = (e: React.FormEvent) => {
+  const handleQuickSetup = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const teamCount = Number(quickSetupData.numTeams);
@@ -122,11 +148,21 @@ export default function TeamsPage() {
       players: [],
     }));
 
-    setTeams(quickTeams);
-    storage.saveTeams(quickTeams);
+    await saveTeams(quickTeams);
     setQuickSetupData({ numTeams: '', budget: '' });
     setShowQuickSetup(false);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading teams...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -205,6 +241,52 @@ export default function TeamsPage() {
                       />
                     ))}
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Team Logo (Optional)</Label>
+                  {formData.logoFile || formData.logoUrl ? (
+                    <div className="flex items-center gap-4">
+                      <div className="relative">
+                        <img
+                          src={formData.logoFile || formData.logoUrl}
+                          alt="Team logo preview"
+                          className="w-20 h-20 object-contain rounded-lg border bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={removeLogo}
+                          className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 hover:bg-destructive/90"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">Logo uploaded</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                          onChange={handleLogoUpload}
+                          className="flex-1"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Or enter URL:</span>
+                        <Input
+                          type="url"
+                          placeholder="https://example.com/logo.png"
+                          value={formData.logoUrl}
+                          onChange={(e) => setFormData({ ...formData, logoUrl: e.target.value, logoFile: '' })}
+                          className="flex-1"
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Supports PNG, JPEG, or SVG. If no logo is provided, team color will be used.
+                      </p>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-3">
                   <Button type="submit" className="flex-1">
@@ -308,10 +390,18 @@ export default function TeamsPage() {
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 flex-1">
-                        <div
-                          className="w-12 h-12 rounded-xl shadow-lg flex-shrink-0"
-                          style={{ backgroundColor: team.color }}
-                        />
+                        {team.logoFile || team.logoUrl ? (
+                          <img
+                            src={team.logoFile || team.logoUrl}
+                            alt={`${team.name} logo`}
+                            className="w-12 h-12 rounded-xl shadow-lg flex-shrink-0 object-contain bg-white border"
+                          />
+                        ) : (
+                          <div
+                            className="w-12 h-12 rounded-xl shadow-lg flex-shrink-0"
+                            style={{ backgroundColor: team.color }}
+                          />
+                        )}
                         <div className="min-w-0 flex-1">
                           <CardTitle className="text-xl truncate">{team.name}</CardTitle>
                           <CardDescription className="mt-1">

@@ -1,37 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { storage } from '@/lib/storage';
+import { useStorageStats, useClearStorage } from '@/hooks/use-storage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Users, Trophy, Play, BarChart3, RotateCcw } from 'lucide-react';
+import { Users, Trophy, Play, BarChart3, RotateCcw, Loader2 } from 'lucide-react';
 
 export default function Home() {
-  const [stats, setStats] = useState({
-    teams: 0,
-    players: 0,
-    hasAuction: false,
-  });
+  const { stats, loading, reload } = useStorageStats();
+  const { clearAll } = useClearStorage();
 
-  useEffect(() => {
-    const teams = storage.getTeams();
-    const players = storage.getPlayers();
-    const auctionState = storage.getAuctionState();
-
-    setStats({
-      teams: teams.length,
-      players: players.length,
-      hasAuction: !!auctionState,
-    });
-  }, []);
-
-  const handleReset = () => {
+  const handleReset = async () => {
     if (confirm('Are you sure you want to reset all data? This will delete teams, players, and auction progress.')) {
-      storage.clearAll();
-      setStats({ teams: 0, players: 0, hasAuction: false });
+      await clearAll();
+      await reload();
       window.location.reload();
     }
   };
@@ -68,8 +52,14 @@ export default function Home() {
               <Trophy className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.teams}</div>
-              <p className="text-xs text-muted-foreground">Teams configured</p>
+              {loading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{stats.teams}</div>
+                  <p className="text-xs text-muted-foreground">Teams configured</p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -79,8 +69,14 @@ export default function Home() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.players}</div>
-              <p className="text-xs text-muted-foreground">Players added</p>
+              {loading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{stats.players}</div>
+                  <p className="text-xs text-muted-foreground">Players added</p>
+                </>
+              )}
             </CardContent>
           </Card>
 
@@ -90,10 +86,16 @@ export default function Home() {
               <Play className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {stats.hasAuction ? 'Active' : 'Not Started'}
-              </div>
-              <p className="text-xs text-muted-foreground">Current state</p>
+              {loading ? (
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">
+                    {stats.hasAuction ? 'Active' : 'Not Started'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Current state</p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -251,11 +253,10 @@ export default function Home() {
       <footer className="border-t mt-12">
         <div className="container mx-auto px-4 py-6">
           <p className="text-center text-sm text-muted-foreground">
-            Sports Auction System - All data is stored locally in your browser
+            Sports Auction System - All data is stored locally in your browser using IndexedDB
           </p>
         </div>
       </footer>
     </div>
   );
 }
-

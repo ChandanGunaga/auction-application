@@ -20,6 +20,8 @@ export interface Team {
   budget: number;
   remainingBudget: number;
   players: Player[];
+  logoUrl?: string;
+  logoFile?: string; // base64 encoded logo image
 }
 
 export interface AuctionState {

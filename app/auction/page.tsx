@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Player, Team, AuctionState, HistoryEntry } from '@/types/auction';
-import { storage } from '@/lib/storage';
+import { storage, migrateFromLocalStorage } from '@/lib/storage';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { Toaster } from '@/components/ui/toaster';
-import { Play, Undo2, Home, CheckCircle, XCircle, SkipForward, Users, Trophy, AlertCircle, BarChart3, RotateCcw, ArrowRightLeft } from 'lucide-react';
+import { Play, Undo2, Home, CheckCircle, XCircle, SkipForward, Users, Trophy, AlertCircle, BarChart3, RotateCcw, ArrowRightLeft, Loader2 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
@@ -33,6 +33,7 @@ export default function AuctionPage() {
   const [expandedTeam, setExpandedTeam] = useState<string | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [newPlayerStatus, setNewPlayerStatus] = useState<'available' | 'sold' | 'unsold' | 'passed'>('available');
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   const getPlayerInitials = (name: string) => {
@@ -43,21 +44,29 @@ export default function AuctionPage() {
     return (names[0][0] + names[names.length - 1][0]).toUpperCase();
   };
 
+  // Load data on mount
   useEffect(() => {
-    const savedTeams = storage.getTeams();
-    const savedPlayers = storage.getPlayers();
-    const savedState = storage.getAuctionState();
+    async function loadData() {
+      setLoading(true);
+      await migrateFromLocalStorage();
 
-    if (savedState) {
-      setTeams(savedState.teams);
-      setPlayers(savedState.players);
-      setCurrentPlayerIndex(savedState.currentPlayerIndex);
-      setHistory(savedState.history);
-      setAuctionStarted(savedState.auctionStarted);
-    } else {
-      setTeams(savedTeams);
-      setPlayers(savedPlayers.filter(p => p.status === 'available'));
+      const savedTeams = await storage.getTeams();
+      const savedPlayers = await storage.getPlayers();
+      const savedState = await storage.getAuctionState();
+
+      if (savedState) {
+        setTeams(savedState.teams);
+        setPlayers(savedState.players);
+        setCurrentPlayerIndex(savedState.currentPlayerIndex);
+        setHistory(savedState.history);
+        setAuctionStarted(savedState.auctionStarted);
+      } else {
+        setTeams(savedTeams);
+        setPlayers(savedPlayers.filter(p => p.status === 'available'));
+      }
+      setLoading(false);
     }
+    loadData();
   }, []);
 
   const currentPlayer = players[currentPlayerIndex];
@@ -70,7 +79,7 @@ export default function AuctionPage() {
     }
   }, [currentPlayer]);
 
-  const saveState = (updatedTeams: Team[], updatedPlayers: Player[], newHistory?: HistoryEntry[]) => {
+  const saveState = useCallback(async (updatedTeams: Team[], updatedPlayers: Player[], newHistory?: HistoryEntry[]) => {
     const state: AuctionState = {
       teams: updatedTeams,
       players: updatedPlayers,
@@ -79,10 +88,10 @@ export default function AuctionPage() {
       auctionCompleted: currentPlayerIndex >= updatedPlayers.length - 1,
       history: newHistory || history,
     };
-    storage.saveAuctionState(state);
-    storage.saveTeams(updatedTeams);
-    storage.savePlayers(updatedPlayers);
-  };
+    await storage.saveAuctionState(state);
+    await storage.saveTeams(updatedTeams);
+    await storage.savePlayers(updatedPlayers);
+  }, [currentPlayerIndex, auctionStarted, history]);
 
   const startAuction = () => {
     if (teams.length === 0 || players.length === 0) {
@@ -100,7 +109,7 @@ export default function AuctionPage() {
     });
   };
 
-  const handleSold = () => {
+  const handleSold = async () => {
     if (!selectedTeam) {
       toast({
         title: "No team selected",
@@ -163,7 +172,7 @@ export default function AuctionPage() {
     setTeams(updatedTeams);
     setPlayers(updatedPlayers);
     setHistory([historyEntry, ...history]);
-    saveState(updatedTeams, updatedPlayers, [historyEntry, ...history]);
+    await saveState(updatedTeams, updatedPlayers, [historyEntry, ...history]);
 
     toast({
       title: "Player sold!",
@@ -173,7 +182,7 @@ export default function AuctionPage() {
     moveToNextPlayer();
   };
 
-  const handleUnsold = () => {
+  const handleUnsold = async () => {
     const updatedPlayer: Player = { ...currentPlayer, status: 'unsold' };
     const updatedPlayers = players.map(p => p.id === currentPlayer.id ? updatedPlayer : p);
     const historyEntry: HistoryEntry = {
@@ -185,7 +194,7 @@ export default function AuctionPage() {
 
     setPlayers(updatedPlayers);
     setHistory([historyEntry, ...history]);
-    saveState(teams, updatedPlayers, [historyEntry, ...history]);
+    await saveState(teams, updatedPlayers, [historyEntry, ...history]);
 
     toast({
       title: "Player unsold",
@@ -219,7 +228,7 @@ export default function AuctionPage() {
     setCustomAmount('');
   };
 
-  const handleUndo = () => {
+  const handleUndo = async () => {
     if (history.length === 0) {
       toast({
         title: "Nothing to undo",
@@ -252,7 +261,7 @@ export default function AuctionPage() {
     setTeams(updatedTeams);
     setHistory(updatedHistory);
     setCurrentPlayerIndex(prev => Math.max(0, prev - 1));
-    saveState(updatedTeams, updatedPlayers, updatedHistory);
+    await saveState(updatedTeams, updatedPlayers, updatedHistory);
 
     toast({
       title: "Action undone",
@@ -290,7 +299,7 @@ export default function AuctionPage() {
     }
   };
 
-  const handleTransfer = () => {
+  const handleTransfer = async () => {
     if (!transferToTeam) {
       toast({
         title: "No team selected",
@@ -324,7 +333,6 @@ export default function AuctionPage() {
     // Remove player from current team if they have one
     let updatedTeams = [...teams];
     if (currentPlayer.teamId) {
-      const oldTeam = teams.find(t => t.id === currentPlayer.teamId);
       updatedTeams = teams.map(t => {
         if (t.id === currentPlayer.teamId) {
           return {
@@ -360,7 +368,7 @@ export default function AuctionPage() {
 
     setTeams(updatedTeams);
     setPlayers(updatedPlayers);
-    saveState(updatedTeams, updatedPlayers);
+    await saveState(updatedTeams, updatedPlayers);
 
     const oldTeamName = currentPlayer.teamId
       ? teams.find(t => t.id === currentPlayer.teamId)?.name
@@ -376,7 +384,7 @@ export default function AuctionPage() {
     setTransferPrice('');
   };
 
-  const handleStatusChange = () => {
+  const handleStatusChange = async () => {
     let updatedTeams = [...teams];
     let updatedPlayer: Player = { ...currentPlayer, status: newPlayerStatus };
 
@@ -403,7 +411,7 @@ export default function AuctionPage() {
 
     setPlayers(updatedPlayers);
     setTeams(updatedTeams);
-    saveState(updatedTeams, updatedPlayers);
+    await saveState(updatedTeams, updatedPlayers);
 
     toast({
       title: "Status updated",
@@ -412,6 +420,18 @@ export default function AuctionPage() {
 
     setShowStatusDialog(false);
   };
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading auction data...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Pre-auction screen
   if (!auctionStarted) {
@@ -584,7 +604,7 @@ export default function AuctionPage() {
 
             <div className="flex items-center gap-3 flex-1 max-w-md">
               <Label className="text-sm text-muted-foreground whitespace-nowrap">Select Player:</Label>
-              <Select value={currentPlayer.id} onValueChange={handlePlayerSelect}>
+              <Select value={currentPlayer?.id || ''} onValueChange={handlePlayerSelect}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a player" />
                 </SelectTrigger>
@@ -786,7 +806,7 @@ export default function AuctionPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>New Status</Label>
-                          <Select value={newPlayerStatus} onValueChange={(value: any) => setNewPlayerStatus(value)}>
+                          <Select value={newPlayerStatus} onValueChange={(value: 'available' | 'sold' | 'unsold' | 'passed') => setNewPlayerStatus(value)}>
                             <SelectTrigger>
                               <SelectValue placeholder="Select new status" />
                             </SelectTrigger>
@@ -910,7 +930,15 @@ export default function AuctionPage() {
                         backgroundColor: selectedTeam === team.id ? `${team.color}15` : 'white',
                       }}
                     >
-                      <div className="w-10 h-10 rounded-full mx-auto mb-2" style={{ backgroundColor: team.color }} />
+                      {team.logoFile || team.logoUrl ? (
+                        <img
+                          src={team.logoFile || team.logoUrl}
+                          alt={`${team.name} logo`}
+                          className="w-10 h-10 rounded-full mx-auto mb-2 object-contain bg-white border"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full mx-auto mb-2" style={{ backgroundColor: team.color }} />
+                      )}
                       <p className="font-semibold text-sm truncate">{team.name}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {team.remainingBudget.toLocaleString()} pts
@@ -989,7 +1017,15 @@ export default function AuctionPage() {
                   >
                     <CardHeader className="pb-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                        {team.logoFile || team.logoUrl ? (
+                          <img
+                            src={team.logoFile || team.logoUrl}
+                            alt={`${team.name} logo`}
+                            className="w-10 h-10 rounded-full flex-shrink-0 object-contain bg-white border"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                        )}
                         <div className="min-w-0 flex-1">
                           <CardTitle className="text-base truncate">{team.name}</CardTitle>
                           <CardDescription className="text-xs">
@@ -1042,10 +1078,21 @@ export default function AuctionPage() {
           <Card className="mb-6">
             <CardHeader>
               <div className="flex items-center gap-4">
-                <div
-                  className="w-12 h-12 rounded-xl flex-shrink-0"
-                  style={{ backgroundColor: teams.find(t => t.id === expandedTeam)?.color }}
-                />
+                {(() => {
+                  const team = teams.find(t => t.id === expandedTeam);
+                  return team?.logoFile || team?.logoUrl ? (
+                    <img
+                      src={team.logoFile || team.logoUrl}
+                      alt={`${team.name} logo`}
+                      className="w-12 h-12 rounded-xl flex-shrink-0 object-contain bg-white border"
+                    />
+                  ) : (
+                    <div
+                      className="w-12 h-12 rounded-xl flex-shrink-0"
+                      style={{ backgroundColor: team?.color }}
+                    />
+                  );
+                })()}
                 <div>
                   <CardTitle className="text-xl">
                     {teams.find(t => t.id === expandedTeam)?.name} Squad
@@ -1136,7 +1183,7 @@ export default function AuctionPage() {
               </CardContent>
             </Card>
           )}
-        
+
       </main>
     </div>
   );

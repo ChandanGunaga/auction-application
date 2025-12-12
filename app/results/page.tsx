@@ -2,25 +2,34 @@
 
 import { useState, useEffect } from 'react';
 import { Team } from '@/types/auction';
-import { storage } from '@/lib/storage';
+import { storage, migrateFromLocalStorage } from '@/lib/storage';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Home, Printer, Download, Trophy } from 'lucide-react';
+import { Home, Printer, Download, Trophy, Loader2 } from 'lucide-react';
 
 export default function ResultsPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedState = storage.getAuctionState();
-    if (savedState) {
-      setTeams(savedState.teams);
-    } else {
-      setTeams(storage.getTeams());
+    async function loadData() {
+      setLoading(true);
+      await migrateFromLocalStorage();
+
+      const savedState = await storage.getAuctionState();
+      if (savedState) {
+        setTeams(savedState.teams);
+      } else {
+        const savedTeams = await storage.getTeams();
+        setTeams(savedTeams);
+      }
+      setLoading(false);
     }
+    loadData();
   }, []);
 
   const selectedTeamData = teams.find(t => t.id === selectedTeam);
@@ -50,6 +59,17 @@ export default function ResultsPage() {
     a.download = `auction-results-${Date.now()}.json`;
     a.click();
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading results...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -100,7 +120,15 @@ export default function ResultsPage() {
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-full" style={{ backgroundColor: team.color }} />
+                    {team.logoFile || team.logoUrl ? (
+                      <img
+                        src={team.logoFile || team.logoUrl}
+                        alt={`${team.name} logo`}
+                        className="w-10 h-10 rounded-full object-contain bg-white border"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full" style={{ backgroundColor: team.color }} />
+                    )}
                     <CardTitle className="text-lg">{team.name}</CardTitle>
                   </div>
                 </CardHeader>
@@ -150,7 +178,15 @@ export default function ResultsPage() {
           <Card className="mb-8">
             <CardHeader>
               <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-xl" style={{ backgroundColor: selectedTeamData.color }} />
+                {selectedTeamData.logoFile || selectedTeamData.logoUrl ? (
+                  <img
+                    src={selectedTeamData.logoFile || selectedTeamData.logoUrl}
+                    alt={`${selectedTeamData.name} logo`}
+                    className="w-14 h-14 rounded-xl object-contain bg-white border"
+                  />
+                ) : (
+                  <div className="w-14 h-14 rounded-xl" style={{ backgroundColor: selectedTeamData.color }} />
+                )}
                 <div>
                   <CardTitle className="text-2xl">{selectedTeamData.name} Squad</CardTitle>
                   <CardDescription>Complete team roster and player details</CardDescription>
@@ -218,7 +254,15 @@ export default function ResultsPage() {
               {teams.map(team => (
                 <div key={team.id}>
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full" style={{ backgroundColor: team.color }} />
+                    {team.logoFile || team.logoUrl ? (
+                      <img
+                        src={team.logoFile || team.logoUrl}
+                        alt={`${team.name} logo`}
+                        className="w-10 h-10 rounded-full object-contain bg-white border"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full" style={{ backgroundColor: team.color }} />
+                    )}
                     <div className="flex-1">
                       <h3 className="text-xl font-bold">{team.name}</h3>
                       <p className="text-sm text-muted-foreground">

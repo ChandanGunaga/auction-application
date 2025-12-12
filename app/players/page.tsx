@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Player } from '@/types/auction';
-import { storage } from '@/lib/storage';
+import { usePlayers } from '@/hooks/use-storage';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,10 +12,10 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Plus, Upload, Pencil, Trash2, Users } from 'lucide-react';
+import { Home, Plus, Upload, Pencil, Trash2, Users, Loader2 } from 'lucide-react';
 
 export default function PlayersPage() {
-  const [players, setPlayers] = useState<Player[]>([]);
+  const { players, loading, savePlayers } = usePlayers();
   const [showDialog, setShowDialog] = useState(false);
   const [showCsvDialog, setShowCsvDialog] = useState(false);
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null);
@@ -30,12 +30,7 @@ export default function PlayersPage() {
     photoFile: '',
   });
 
-  useEffect(() => {
-    const savedPlayers = storage.getPlayers();
-    setPlayers(savedPlayers);
-  }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (editingPlayer) {
@@ -51,8 +46,7 @@ export default function PlayersPage() {
             }
           : p
       );
-      setPlayers(updated);
-      storage.savePlayers(updated);
+      await savePlayers(updated);
     } else {
       const newPlayer: Player = {
         id: Date.now().toString(),
@@ -66,8 +60,7 @@ export default function PlayersPage() {
         photoFile: formData.photoFile || undefined,
       };
       const updated = [...players, newPlayer];
-      setPlayers(updated);
-      storage.savePlayers(updated);
+      await savePlayers(updated);
     }
 
     resetForm();
@@ -87,11 +80,10 @@ export default function PlayersPage() {
     setShowDialog(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this player?')) {
       const updated = players.filter(p => p.id !== id);
-      setPlayers(updated);
-      storage.savePlayers(updated);
+      await savePlayers(updated);
     }
   };
 
@@ -112,7 +104,7 @@ export default function PlayersPage() {
     }
   };
 
-  const handleBulkImport = (e: React.FormEvent) => {
+  const handleBulkImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!csvData.trim()) return;
 
@@ -132,11 +124,21 @@ export default function PlayersPage() {
     });
 
     const updated = [...players, ...newPlayers];
-    setPlayers(updated);
-    storage.savePlayers(updated);
+    await savePlayers(updated);
     setCsvData('');
     setShowCsvDialog(false);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Loading players...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
